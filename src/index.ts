@@ -1,18 +1,32 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Bind resources to your worker in `wrangler.toml`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+import * as line from '@line/bot-sdk';
+
+interface Env {
+	LINE_CHANNEL_ACCESS_TOKEN: string;
+}
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
-		return new Response('Hello World!');
+		const client = new line.messagingApi.MessagingApiClient({ channelAccessToken: env.LINE_CHANNEL_ACCESS_TOKEN });
+
+		const body = await request.text();
+		const events = JSON.parse(body).events;
+
+		await Promise.all(
+			events
+				.filter((e) => e.type === 'message' && e.message.type === 'text')
+				.map((e) =>
+					client.replyMessage({
+						replyToken: e.replyToken,
+						messages: [
+							{
+								type: 'text',
+								text: e.message.text,
+							},
+						],
+					})
+				)
+		);
+
+		return new Response('OK');
 	},
 } satisfies ExportedHandler<Env>;
