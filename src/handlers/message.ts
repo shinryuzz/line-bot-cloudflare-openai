@@ -2,8 +2,10 @@ import type { WebhookEvent } from "@line/bot-sdk";
 import type { MessageEvent, TextMessage } from "@line/bot-sdk";
 
 import { generateResponse } from "../services/openai";
+import type { ChatMessage } from "../services/openai";
 import { sendReply } from "../services/line";
 import type { ServiceClients } from "../services/clients";
+import { getConversationHistory, saveMessage } from "../services/db";
 
 type TextMessageEvent = MessageEvent & { message: TextMessage };
 
@@ -17,10 +19,27 @@ export async function handleEvents(events: WebhookEvent[], clients: ServiceClien
 }
 
 async function handleTextMessage(event: TextMessageEvent, clients: ServiceClients) {
-  const { lineClient, openaiClient } = clients;
+  const { lineClient, openaiClient, dbClient } = clients;
+
+  const userId = event.source.userId;
+  if (!userId) return;
 
   try {
-    const responseMessage = await generateResponse(openaiClient, event.message.text);
+    const hisotry = await getConversationHistory(dbClient, userId);
+    const messageHistory: ChatMessage[] = hisotry.map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: msg.content,
+    }));
+
+    const responseMessage = await generateResponse(
+      openaiClient,
+      event.message.text,
+      messageHistory
+    );
+
+    if (!responseMessage) throw new Error("Failed to generate response");
+    await saveMessage(dbClient, userId, event.message.text, "user");
+    await saveMessage(dbClient, userId, responseMessage, "assistant");
     await sendReply(lineClient, event.replyToken, responseMessage);
   } catch (error) {
     console.error("Error handling message:", error);

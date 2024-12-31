@@ -1,19 +1,40 @@
 import OpenAI from "openai";
 
+export type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
 export function createOpenAIClient(apiKey: string) {
   return new OpenAI({ apiKey });
 }
 
-export async function generateResponse(openai: OpenAI, userMessage: string) {
+export async function generateResponse(openai: OpenAI, content: string, history: ChatMessage[]) {
+  const model = "gpt-4o-mini-2024-07-18";
+  const systemSetting = `
+あなたは親切なアシスタントです。
+以下の制約に従って回答してください：
+- マークダウン記法を使用しない
+- コードブロックやインラインコードの記法を使用しない
+- 箇条書きには記号や番号ではなく、「・」を使用する
+- 簡潔に応答する
+`;
+
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: systemSetting,
+    },
+    ...history,
+    {
+      role: "user",
+      content,
+    },
+  ];
+
   const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini-2024-07-18",
-    messages: [
-      {
-        role: "system",
-        content: "あなたは親切なアシスタントです。簡潔に応答してください。",
-      },
-      { role: "user", content: userMessage },
-    ],
+    model,
+    messages,
   });
 
   const responseMeessage = completion.choices[0].message.content;
